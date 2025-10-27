@@ -1,0 +1,112 @@
+# API Monitoring System Configuration
+# Copy to config.yaml and adjust values
+
+database:
+  type: "sqlite"
+  url: "sqlite+aiosqlite:///./data/api_monitor.db"
+  pool_size: 5
+  max_overflow: 10
+  pool_pre_ping: true
+  echo: false
+
+endpoints:
+  - name: "GitHub API"
+    url: "https://api.github.com/status"
+    method: "GET"
+    interval: 60
+    timeout: 5
+    expected_status: 200
+    is_active: true
+    
+  - name: "Example API"
+    url: "https://api.example.com/health"
+    method: "GET"
+    interval: 120
+    timeout: 10
+    expected_status: 200
+    headers:
+      Authorization: "Bearer token123"
+    is_active: true
+
+notifications:
+  enabled: true
+  cooldown_seconds: 300
+  send_recovery: true
+  
+  email:
+    enabled: false
+    smtp_host: "smtp.gmail.com"
+    smtp_port: 587
+    smtp_use_tls: true
+    smtp_user: "your-email@gmail.com"
+    smtp_password: "your-app-password"
+    from_addr: "api-monitor@example.com"
+    from_name: "API Monitor"
+    to_addrs:
+      - "admin@example.com"
+    subject_template: "🚨 Alert: {endpoint_name} is DOWN"
+    body_template: |
+      API Endpoint Alert
+      
+      Endpoint: {endpoint_name}
+      URL: {url}
+      Status: UNREACHABLE
+      Error: {error}
+      Time: {timestamp}
+  
+  webhook:
+    enabled: false
+    url: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+    method: "POST"
+    headers:
+      Content-Type: "application/json"
+    retry_count: 3
+    retry_delay: 5
+    timeout: 10
+    payload_template: |
+      {
+        "text": "🚨 API Monitor Alert: {endpoint_name} is DOWN"
+      }
+  
+  telegram:
+    enabled: false
+    bot_token: "your_bot_token"
+    chat_id: "your_chat_id"
+    message_template: "🚨 *{endpoint_name}* is DOWN\\nError: {error}"
+    parse_mode: "Markdown"
+
+monitoring:
+  check_history_days: 90
+  cleanup_interval: 86400
+  max_concurrent_checks: 20
+
+logging:
+  level: "INFO"
+  format: "json"
+  file: "logs/api_monitor.log"
+  console: true
+
+api:
+  host: "0.0.0.0"
+  port: 8000
+  workers: 1
+  reload: false
+  
+  cors:
+    enabled: true
+    allow_origins:
+      - "http://localhost:3000"
+      - "http://localhost:8080"
+    allow_credentials: true
+    allow_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+    allow_headers:
+      - "*"
+  
+  auth:
+    enabled: false
+    api_key: "your-secret-api-key"
+    header_name: "X-API-Key"
