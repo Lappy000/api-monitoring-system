@@ -38,7 +38,7 @@ cryptography==46.0.3
 slowapi==0.1.9
 
 # Caching
-redis==5.0.1
+redis==7.0.1
 aioredis==2.0.1
 
 # Authentication
