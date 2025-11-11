@@ -17,12 +17,12 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
     
     - name: Cache pip packages
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
@@ -34,6 +34,16 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
+    
+    - name: Create test environment
+      run: |
+        cp .env.example .env || echo "No .env.example found, skipping"
+        mkdir -p test_data
+        mkdir -p logs
+    
+    - name: Initialize test database
+      run: |
+        python -c "from app.database.session import Base, engine; Base.metadata.create_all(bind=engine)" || echo "Database initialization skipped"
     
     - name: Lint with flake8
       run: |
@@ -50,16 +60,19 @@ jobs:
       continue-on-error: true
     
     - name: Run tests with pytest
+      env:
+        PYTHONPATH: ${{ github.workspace }}
       run: |
-        pytest --cov=app --cov-report=xml --cov-report=term -v
+        pytest --cov=app --cov-report=xml --cov-report=term -v --tb=short
     
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
-        file: ./coverage.xml
+        files: ./coverage.xml
         flags: unittests
         name: codecov-umbrella
         fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
 
   security:
     runs-on: ubuntu-latest
@@ -67,7 +80,7 @@ jobs:
     - uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     

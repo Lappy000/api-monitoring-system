@@ -15,15 +15,15 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
 
     - name: Cache pip packages
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: ~/.cache/pip
         key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
@@ -35,20 +35,31 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
         pip install -r requirements-dev.txt
+    
+    - name: Create test environment
+      run: |
+        cp .env.example .env || echo "No .env.example found, skipping"
+        mkdir -p test_data
+        mkdir -p logs
 
     - name: Run verification tests
+      env:
+        PYTHONPATH: ${{ github.workspace }}
       run: |
         python verify_tests.py
 
     - name: Generate coverage report
+      env:
+        PYTHONPATH: ${{ github.workspace }}
       run: |
         python run_tests.py --html
 
     - name: Upload coverage to Codecov (optional)
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
-        file: ./htmlcov/coverage.xml
+        files: ./htmlcov/coverage.xml
         fail_ci_if_error: false
+        token: ${{ secrets.CODECOV_TOKEN }}
       continue-on-error: true
 
   lint:
@@ -56,10 +67,10 @@ jobs:
 
     steps:
     - name: Checkout code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
 
