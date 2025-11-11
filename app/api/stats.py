@@ -2,9 +2,11 @@
 
 from datetime import datetime
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database.session import get_db
 from app.models.endpoint import Endpoint
@@ -19,13 +21,16 @@ from app.schemas.stats import (
     OverallSummaryResponse
 )
 from app.utils.logger import get_logger
+from app.core.rate_limiter import limiter
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 
 @router.get("/stats/uptime/{endpoint_id}", response_model=UptimeStatsResponse)
+@limiter.limit("200/minute")
 async def get_uptime_stats(
+    request: Request,
     endpoint_id: int,
     period: str = Query(default="24h", pattern="^(24h|7d|30d)$"),
     db: AsyncSession = Depends(get_db)
@@ -67,7 +72,9 @@ async def get_uptime_stats(
 
 
 @router.get("/stats/history/{endpoint_id}", response_model=CheckHistoryResponse)
+@limiter.limit("200/minute")
 async def get_check_history(
+    request: Request,
     endpoint_id: int,
     limit: int = Query(default=100, le=1000),
     offset: int = Query(default=0, ge=0),
@@ -153,7 +160,9 @@ async def get_check_history(
 
 
 @router.get("/stats/incidents/{endpoint_id}", response_model=DowntimeIncidentsResponse)
+@limiter.limit("100/minute")
 async def get_downtime_incidents(
+    request: Request,
     endpoint_id: int,
     period: str = Query(default="7d", pattern="^(24h|7d|30d)$"),
     min_duration: int = Query(default=1, ge=1, description="Minimum duration in minutes"),
@@ -207,7 +216,8 @@ async def get_downtime_incidents(
 
 
 @router.get("/stats/summary", response_model=OverallSummaryResponse)
-async def get_overall_summary(db: AsyncSession = Depends(get_db)):
+@limiter.limit("100/minute")
+async def get_overall_summary(request: Request, db:AsyncSession = Depends(get_db)):
     """
     Get overall summary statistics for all endpoints.
     

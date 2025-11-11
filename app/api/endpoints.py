@@ -1,9 +1,10 @@
 """Endpoint management API routes."""
-
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from app.database.session import get_db
 from app.models.endpoint import Endpoint
@@ -18,13 +19,17 @@ from app.schemas.endpoint import (
 from app.core.health_checker import HealthChecker
 from app.core.scheduler import get_scheduler
 from app.utils.logger import get_logger
+from app.core.metrics import metrics_collector
+from app.core.rate_limiter import limiter
 
 router = APIRouter()
 logger = get_logger(__name__)
 
 
 @router.get("/endpoints", response_model=EndpointListResponse)
+@limiter.limit("100/minute")
 async def list_endpoints(
+    request: Request,
     skip: int = 0,
     limit: int = 100,
     active_only: bool = False,
@@ -34,11 +39,13 @@ async def list_endpoints(
     List all endpoints.
     
     Args:
+        request: FastAPI request object
         skip: Number of records to skip
         limit: Maximum number of records to return
         active_only: Filter only active endpoints
         db: Database session
     """
+    
     query = select(Endpoint)
     
     if active_only:
@@ -62,7 +69,9 @@ async def list_endpoints(
 
 
 @router.post("/endpoints", response_model=EndpointResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("50/minute")
 async def create_endpoint(
+    request: Request,
     endpoint_data: EndpointCreate,
     db: AsyncSession = Depends(get_db)
 ):
@@ -108,7 +117,9 @@ async def create_endpoint(
 
 
 @router.get("/endpoints/{endpoint_id}", response_model=EndpointResponse)
+@limiter.limit("200/minute")
 async def get_endpoint(
+    request: Request,
     endpoint_id: int,
     db: AsyncSession = Depends(get_db)
 ):
@@ -134,7 +145,9 @@ async def get_endpoint(
 
 
 @router.put("/endpoints/{endpoint_id}", response_model=EndpointResponse)
+@limiter.limit("50/minute")
 async def update_endpoint(
+    request: Request,
     endpoint_id: int,
     endpoint_data: EndpointUpdate,
     db: AsyncSession = Depends(get_db)
@@ -183,7 +196,9 @@ async def update_endpoint(
 
 
 @router.delete("/endpoints/{endpoint_id}", status_code=status.HTTP_204_NO_CONTENT)
+@limiter.limit("20/minute")
 async def delete_endpoint(
+    request: Request,
     endpoint_id: int,
     db: AsyncSession = Depends(get_db)
 ):
@@ -224,9 +239,11 @@ async def delete_endpoint(
 
 
 @router.post("/endpoints/{endpoint_id}/check", response_model=CheckManualResponse)
+@limiter.limit("30/minute")
 async def manual_check(
+    request: Request,
     endpoint_id: int,
-    request: CheckManualRequest = CheckManualRequest(),
+    check_request: CheckManualRequest = CheckManualRequest(),
     db: AsyncSession = Depends(get_db)
 ):
     """

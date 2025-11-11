@@ -3,11 +3,12 @@
 import asyncio
 import json
 from datetime import datetime, timedelta
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, TYPE_CHECKING
 import aiosmtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import aiohttp
+import redis.asyncio as redis
 
 from app.models.endpoint import Endpoint
 from app.models.check_result import CheckResult
@@ -15,6 +16,9 @@ from app.models.notification_log import NotificationLog
 from app.config import NotificationsConfig
 from app.utils.logger import get_logger
 from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from app.config import Config
 
 logger = get_logger(__name__)
 
@@ -24,18 +28,43 @@ class NotificationManager:
     Manager for sending notifications through multiple channels.
     
     Supports email, webhooks, and Telegram notifications with cooldown
-    mechanism to prevent spam.
+    mechanism to prevent spam. Cooldown is stored in Redis for multi-worker
+    environment support.
     """
     
-    def __init__(self, config: NotificationsConfig):
+    def __init__(self, config: NotificationsConfig, app_config: "Config"):
         """
         Initialize notification manager.
         
         Args:
             config: Notifications configuration
+            app_config: Application configuration (required)
         """
         self.config = config
-        self.last_notification_times: Dict[int, datetime] = {}
+        self.redis_client: Optional[redis.Redis] = None
+        self.redis_config = app_config.redis
+        
+        # Initialize Redis connection if enabled (test immediately)
+        if app_config.redis.enabled:
+            try:
+                self.redis_client = redis.from_url(
+                    app_config.redis.url,
+                    decode_responses=True,
+                    socket_timeout=app_config.redis.socket_connect_timeout,
+                    socket_connect_timeout=app_config.redis.socket_connect_timeout,
+                    max_connections=app_config.redis.max_connections
+                )
+                # Note: Connection is tested later when test_redis_connection() is called
+                logger.info("Redis client created, connection will be tested on first use")
+            except Exception as e:
+                logger.error(
+                    f"Failed to create Redis client, falling back to in-memory cooldown",
+                    extra={"error": str(e)}
+                )
+                self.redis_client = None
+        
+        # Fallback in-memory storage for single-worker environments
+        self._in_memory_cooldown: Dict[int, datetime] = {}
         
         logger.info(
             "Notification manager initialized",
@@ -43,11 +72,12 @@ class NotificationManager:
                 "email_enabled": config.email.enabled,
                 "webhook_enabled": config.webhook.enabled,
                 "telegram_enabled": config.telegram.enabled,
-                "cooldown_seconds": config.cooldown_seconds
+                "cooldown_seconds": config.cooldown_seconds,
+                "redis_enabled": app_config.redis.enabled
             }
         )
     
-    def _is_cooldown_active(self, endpoint_id: int) -> bool:
+    async def _is_cooldown_active(self, endpoint_id: int) -> bool:
         """
         Check if notification cooldown is active for an endpoint.
         
@@ -57,17 +87,57 @@ class NotificationManager:
         Returns:
             bool: True if cooldown is active
         """
-        if endpoint_id not in self.last_notification_times:
+        try:
+            if self.redis_client:
+                # Use Redis for multi-worker environments
+                key = f"notification_cooldown:{endpoint_id}"
+                last_time_str = await self.redis_client.get(key)
+                
+                if not last_time_str:
+                    return False
+                
+                last_time = datetime.fromisoformat(last_time_str)
+                cooldown_delta = timedelta(seconds=self.config.cooldown_seconds)
+                
+                return datetime.utcnow() - last_time < cooldown_delta
+            else:
+                # Fallback to in-memory for single-worker environments
+                if endpoint_id not in self._in_memory_cooldown:
+                    return False
+                
+                last_time = self._in_memory_cooldown[endpoint_id]
+                cooldown_delta = timedelta(seconds=self.config.cooldown_seconds)
+                
+                return datetime.utcnow() - last_time < cooldown_delta
+        except Exception as e:
+            logger.error(
+                f"Error checking cooldown status, allowing notification to avoid silent failures",
+                extra={"endpoint_id": endpoint_id, "error": str(e)}
+            )
+            # If cooldown check fails, ALLOW notification to avoid silent failures
+            # For a monitoring system, it's better to send duplicate notifications
+            # than to miss critical alerts when Redis is down
             return False
-        
-        last_time = self.last_notification_times[endpoint_id]
-        cooldown_delta = timedelta(seconds=self.config.cooldown_seconds)
-        
-        return datetime.utcnow() - last_time < cooldown_delta
     
-    def _update_cooldown(self, endpoint_id: int) -> None:
+    async def _update_cooldown(self, endpoint_id: int) -> None:
         """Update last notification time for an endpoint."""
-        self.last_notification_times[endpoint_id] = datetime.utcnow()
+        try:
+            if self.redis_client:
+                # Use Redis for multi-worker environments
+                key = f"notification_cooldown:{endpoint_id}"
+                await self.redis_client.set(
+                    key,
+                    datetime.utcnow().isoformat(),
+                    ex=self.config.cooldown_seconds
+                )
+            else:
+                # Fallback to in-memory
+                self._in_memory_cooldown[endpoint_id] = datetime.utcnow()
+        except Exception as e:
+            logger.error(
+                f"Error updating cooldown",
+                extra={"endpoint_id": endpoint_id, "error": str(e)}
+            )
     
     def _format_message(
         self,
@@ -284,7 +354,7 @@ class NotificationManager:
             return
         
         # Check cooldown
-        if self._is_cooldown_active(endpoint.id):
+        if await self._is_cooldown_active(endpoint.id):
             logger.debug(
                 f"Skipping notification due to cooldown",
                 extra={
@@ -377,7 +447,7 @@ class NotificationManager:
             db.add(log)
         
         # Update cooldown
-        self._update_cooldown(endpoint.id)
+        await self._update_cooldown(endpoint.id)
         
         # Commit notification logs
         await db.commit()
@@ -441,3 +511,36 @@ class NotificationManager:
             await self.send_telegram(message, db)
         
         await db.commit()
+    
+    async def close(self):
+        """Close Redis connection if present."""
+        if self.redis_client:
+            try:
+                await self.redis_client.close()
+            except Exception as e:
+                logger.error(f"Error closing Redis connection: {e}")
+    
+    async def test_redis_connection(self) -> bool:
+        """
+        Test Redis connection with ping to verify connectivity.
+        This should be called during startup to fail fast if Redis is required.
+        
+        Returns:
+            bool: True if Redis is connected and working, False otherwise
+        """
+        if not self.redis_client:
+            return False
+            
+        try:
+            await self.redis_client.ping()
+            logger.info("Redis connection verified successfully")
+            return True
+        except Exception as e:
+            logger.error(
+                f"Redis connectivity test failed, disabling Redis client",
+                extra={"error": str(e)}
+            )
+            # CRITICAL: Disable Redis client on connection failure
+            # This ensures fallback to in-memory storage
+            self.redis_client = None
+            return False

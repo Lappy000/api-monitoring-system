@@ -73,6 +73,16 @@ coverage.xml
 *.cover
 .cache
 nosetests.xml
+test_output.txt
+
+# Test files (temporary)
+test_*.py.bak
+quick_test.py
+test_scenarios_simple.py
+test_final.py
+test_final_simple.py
+production_*.py
+run_production_test.py
 
 # Alembic
 alembic/versions/*.pyc

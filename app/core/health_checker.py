@@ -1,8 +1,10 @@
 """Health checker for monitoring API endpoints with async HTTP requests."""
 
+import asyncio
 import time
 from datetime import datetime
 from typing import Optional, Dict, Any
+
 import aiohttp
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,6 +13,7 @@ from app.models.endpoint import Endpoint
 from app.models.check_result import CheckResult
 from app.utils.logger import get_logger
 from app.utils.retry import retry_with_backoff, RetryError
+from app.core.circuit_breaker import get_health_check_circuit_breaker
 
 logger = get_logger(__name__)
 
@@ -54,7 +57,7 @@ class HealthChecker:
     Health checker for monitoring API endpoints.
     
     Performs async HTTP requests with timeout handling, error categorization,
-    and response time measurement.
+    and response time measurement. Uses circuit breaker pattern for fault tolerance.
     """
     
     def __init__(
@@ -114,7 +117,7 @@ class HealthChecker:
         use_retry: bool = True
     ) -> HealthCheckResult:
         """
-        Perform health check on a single endpoint.
+        Perform health check on a single endpoint with circuit breaker protection.
         
         Args:
             endpoint: Endpoint to check
@@ -140,14 +143,30 @@ class HealthChecker:
             }
         )
         
+        # Get circuit breaker for this endpoint
+        circuit_breaker = get_health_check_circuit_breaker(endpoint.name)
+        
+        # Calculate timeout for circuit breaker call (endpoint timeout + buffer)
+        circuit_breaker_timeout = endpoint.timeout + 2
+        
         if use_retry:
             try:
+                # Wrap the actual check with circuit breaker and retry
+                async def _check_with_circuit_breaker():
+                    # Add timeout protection to prevent hanging
+                    try:
+                        return await asyncio.wait_for(
+                            circuit_breaker.call(self._perform_check, endpoint),
+                            timeout=circuit_breaker_timeout
+                        )
+                    except asyncio.TimeoutError:
+                        raise Exception(f"Circuit breaker call timed out after {circuit_breaker_timeout}s")
+                
                 return await retry_with_backoff(
-                    self._perform_check,
-                    endpoint,
+                    _check_with_circuit_breaker,
                     max_attempts=3,
                     base_delay=1.0,
-                    exceptions=(aiohttp.ClientError, asyncio.TimeoutError)
+                    exceptions=(aiohttp.ClientError, asyncio.TimeoutError, Exception)
                 )
             except RetryError as e:
                 logger.error(
@@ -163,7 +182,39 @@ class HealthChecker:
                     error_message=f"Failed after retries: {str(e)}"
                 )
         else:
-            return await self._perform_check(endpoint)
+            # Use circuit breaker without retry but with timeout protection
+            try:
+                return await asyncio.wait_for(
+                    circuit_breaker.call(self._perform_check, endpoint),
+                    timeout=circuit_breaker_timeout
+                )
+            except asyncio.TimeoutError:
+                error_msg = f"Circuit breaker call timed out after {circuit_breaker_timeout}s"
+                logger.error(
+                    f"Health check timeout",
+                    extra={
+                        "endpoint_id": endpoint.id,
+                        "endpoint_name": endpoint.name,
+                        "timeout": circuit_breaker_timeout
+                    }
+                )
+                return HealthCheckResult(
+                    success=False,
+                    error_message=error_msg
+                )
+            except Exception as e:
+                logger.error(
+                    f"Health check failed with circuit breaker",
+                    extra={
+                        "endpoint_id": endpoint.id,
+                        "endpoint_name": endpoint.name,
+                        "error": str(e)
+                    }
+                )
+                return HealthCheckResult(
+                    success=False,
+                    error_message=str(e)
+                )
     
     async def _perform_check(self, endpoint: Endpoint) -> HealthCheckResult:
         """
@@ -376,11 +427,54 @@ class HealthChecker:
             extra={"count": len(endpoints)}
         )
         
-        # Check all endpoints concurrently
-        tasks = [
-            self.check_and_save(endpoint, db)
-            for endpoint in endpoints
-        ]
+        # Check all endpoints concurrently with circuit breakers
+        tasks = []
+        for endpoint in endpoints:
+            # Get circuit breaker for this endpoint
+            circuit_breaker = get_health_check_circuit_breaker(endpoint.name)
+            
+            # Create task with circuit breaker protection and timeout
+            async def check_with_circuit_breaker(endpoint):
+                try:
+                    # Add timeout protection (5 seconds default + 2 second buffer)
+                    timeout = getattr(endpoint, 'timeout', 5) + 2
+                    return await asyncio.wait_for(
+                        circuit_breaker.call(self.check_and_save, endpoint, db),
+                        timeout=timeout
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(
+                        f"Health check timed out in circuit breaker",
+                        extra={
+                            "endpoint_id": endpoint.id,
+                            "endpoint_name": endpoint.name,
+                            "timeout": timeout
+                        }
+                    )
+                    return CheckResult(
+                        endpoint_id=endpoint.id,
+                        success=False,
+                        error_message=f"Circuit breaker call timed out after {timeout}s",
+                        checked_at=datetime.utcnow()
+                    )
+                except Exception as e:
+                    logger.error(
+                        f"Health check failed due to circuit breaker",
+                        extra={
+                            "endpoint_id": endpoint.id,
+                            "endpoint_name": endpoint.name,
+                            "error": str(e)
+                        }
+                    )
+                    # Return a failed check result
+                    return CheckResult(
+                        endpoint_id=endpoint.id,
+                        success=False,
+                        error_message=f"Circuit breaker error: {str(e)}",
+                        checked_at=datetime.utcnow()
+                    )
+            
+            tasks.append(check_with_circuit_breaker(endpoint))
         
         check_results = await asyncio.gather(*tasks, return_exceptions=True)
         
@@ -399,6 +493,3 @@ class HealthChecker:
         
         return valid_results
 
-
-# Import asyncio at the top if not already imported
-import asyncio

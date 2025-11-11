@@ -21,6 +21,11 @@ TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 _test_engine = None
 _test_session_maker = None
 
+# Set up test environment variables before any tests
+import os
+os.environ["API_AUTH_SECRET_KEY"] = "test-secret-key-for-jwt-tokens-minimum-32-characters-long"
+os.environ["API_AUTH_ALGORITHM"] = "HS256"
+
 
 @pytest.fixture(scope="session")
 def event_loop():
@@ -150,3 +155,96 @@ def test_config() -> Config:
             url=TEST_DATABASE_URL
         )
     )
+
+
+@pytest.fixture
+async def sample_user(db_session: AsyncSession):
+    """Create a sample user for testing."""
+    from app.models.user import User
+    import bcrypt
+    
+    # Use bcrypt directly to avoid passlib compatibility issues
+    password = "testpassword"
+    hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
+    user = User(
+        username="testuser",
+        email="test@example.com",
+        full_name="Test User",
+        hashed_password=hashed,
+        is_active=True,
+        is_superuser=False
+    )
+    
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    
+    return user
+
+
+@pytest.fixture
+async def sample_admin_user(db_session: AsyncSession):
+    """Create a sample admin user for testing."""
+    from app.models.user import User
+    import bcrypt
+    
+    # Use bcrypt directly to avoid passlib compatibility issues
+    password = "adminpassword"
+    hashed = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+    
+    admin = User(
+        username="adminuser",
+        email="admin@example.com",
+        full_name="Admin User",
+        hashed_password=hashed,
+        is_active=True,
+        is_superuser=True
+    )
+    
+    db_session.add(admin)
+    await db_session.commit()
+    await db_session.refresh(admin)
+    
+    return admin
+
+
+@pytest.fixture
+async def sample_role(db_session: AsyncSession):
+    """Create a sample role for testing."""
+    from app.models.user import Role
+    
+    role = Role(
+        name="test_role",
+        description="Test Role",
+        permissions={"permissions": ["read:endpoints", "write:endpoints"]},
+        is_active=True
+    )
+    
+    db_session.add(role)
+    await db_session.commit()
+    await db_session.refresh(role)
+    
+    return role
+
+
+@pytest.fixture
+async def sample_check_result(db_session: AsyncSession, sample_endpoint: Endpoint):
+    """Create a sample check result for testing."""
+    from app.models.check_result import CheckResult
+    from datetime import datetime
+    
+    check_result = CheckResult(
+        endpoint_id=sample_endpoint.id,
+        status_code=500,
+        response_time=1.5,
+        success=False,
+        error_message="Connection timeout",
+        checked_at=datetime.utcnow()
+    )
+    
+    db_session.add(check_result)
+    await db_session.commit()
+    await db_session.refresh(check_result)
+    
+    return check_result
