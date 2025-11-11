@@ -5,27 +5,36 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
-    labels:
-      - "dependencies"
-      - "python"
+      day: "monday"
+      time: "09:00"
+    open-pull-requests-limit: 5
     commit-message:
-      prefix: "chore"
-      prefix-development: "chore"
+      prefix: "chore(deps)"
+      prefix-development: "chore(deps-dev)"
       include: "scope"
-    reviewers:
-      - "YOUR_USERNAME"
-    assignees:
-      - "YOUR_USERNAME"
+    groups:
+      github-actions:
+        patterns:
+          - "actions/*"
+      pytest:
+        patterns:
+          - "pytest*"
+      fastapi:
+        patterns:
+          - "fastapi"
+          - "uvicorn"
+          - "pydantic*"
+      database:
+        patterns:
+          - "sqlalchemy"
+          - "alembic"
+          - "aiosqlite"
     
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    labels:
-      - "dependencies"
-      - "github-actions"
     commit-message:
       prefix: "ci"
     
@@ -34,8 +43,5 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    labels:
-      - "dependencies"
-      - "docker"
     commit-message:
       prefix: "build"
