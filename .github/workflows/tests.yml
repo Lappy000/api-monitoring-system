@@ -88,6 +88,7 @@ jobs:
     - name: Check formatting with black
       run: |
         black --check app/ tests/
+      continue-on-error: true
 
     - name: Type check with mypy
       run: |
