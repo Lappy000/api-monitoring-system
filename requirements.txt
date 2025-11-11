@@ -1,16 +1,16 @@
 # Core Framework
-fastapi==0.104.1
+fastapi==0.121.1
 uvicorn[standard]==0.24.0
 pydantic==2.7.4
-pydantic-settings==2.1.0
+pydantic-settings==2.12.0
 
 # Async HTTP Client
 aiohttp==3.9.1
 httpx==0.25.2
 
 # Database
-sqlalchemy==2.0.23
-alembic==1.13.0
+sqlalchemy==2.0.44
+alembic==1.17.1
 aiosqlite==0.19.0
 
 # Scheduling
@@ -18,7 +18,7 @@ apscheduler==3.10.4
 
 # Configuration
 pyyaml==6.0.1
-python-dotenv==1.0.0
+python-dotenv==1.2.1
 
 # Notifications
 aiosmtplib==3.0.1
@@ -28,11 +28,11 @@ structlog==23.2.0
 python-json-logger==2.0.7
 
 # Utilities
-python-dateutil==2.8.2
-pytz==2023.3
+python-dateutil==2.9.0.post0
+pytz==2025.2
 
 # Security
-cryptography==41.0.7
+cryptography==46.0.3
 
 # Rate Limiting
 slowapi==0.1.9
