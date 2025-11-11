@@ -55,7 +55,7 @@ jobs:
         python run_tests.py --html
 
     - name: Upload coverage to Codecov (optional)
-      uses: codecov/codecov-action@v4
+      uses: codecov/codecov-action@v5
       with:
         files: ./htmlcov/coverage.xml
         fail_ci_if_error: false
