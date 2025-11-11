@@ -97,7 +97,18 @@ uvicorn app.main:app --reload
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
 ```
 
-Visit: http://localhost:8000/docs for API documentation
+### 5. Access Interactive API Documentation
+
+FastAPI provides automatic interactive API documentation:
+
+- **Swagger UI**: http://localhost:8000/docs
+- **ReDoc**: http://localhost:8000/redoc
+- **OpenAPI Schema**: http://localhost:8000/openapi.json
+
+**Try it now:**
+1. Start the server: `uvicorn app.main:app --reload`
+2. Open http://localhost:8000/docs in your browser
+3. Explore and test all API endpoints interactively!
 
 ## Docker Deployment
 
@@ -212,7 +223,24 @@ notifications:
 
 ## API Documentation
 
-### Endpoints
+### Interactive Documentation
+
+FastAPI automatically generates interactive API documentation:
+
+- **Swagger UI (Recommended)**: [http://localhost:8000/docs](http://localhost:8000/docs)
+  - Interactive interface to test all endpoints
+  - View request/response schemas
+  - Execute API calls directly from browser
+
+- **ReDoc (Alternative)**: [http://localhost:8000/redoc](http://localhost:8000/redoc)
+  - Clean, searchable documentation
+  - Better for reading and understanding API structure
+
+- **OpenAPI Schema**: [http://localhost:8000/openapi.json](http://localhost:8000/openapi.json)
+  - Machine-readable API specification
+  - Use with API clients and code generators
+
+### API Endpoints Summary
 
 #### Health Check
 ```bash
