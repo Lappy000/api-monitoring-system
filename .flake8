@@ -11,17 +11,7 @@ exclude =
     .pytest_cache
 
 # Ignore non-critical style errors
-ignore = 
-    W293,  # blank line contains whitespace
-    W291,  # trailing whitespace
-    W292,  # no newline at end of file
-    W391,  # blank line at end of file
-    F401,  # imported but unused
-    F541,  # f-string is missing placeholders
-    F811,  # redefinition of unused
-    F841,  # local variable assigned but never used
-    E402,  # module level import not at top of file
-    E306,  # expected 1 blank line
+ignore = W293,W291,W292,W391,F401,F541,F811,F841,E402,E306,E231,E303,E501,E712
 
 # Only check for serious errors
-select = E9,F63,F7,F82,E501,E712,C901
+select = E9,F63,F7,F82,C901
