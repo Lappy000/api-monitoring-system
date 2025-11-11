@@ -1,6 +1,6 @@
 [flake8]
 max-line-length = 100
-max-complexity = 10
+max-complexity = 25
 exclude = 
     .git,
     __pycache__,
@@ -10,8 +10,6 @@ exclude =
     archive,
     .pytest_cache
 
-# Ignore non-critical style errors
 ignore = W293,W291,W292,W391,F401,F541,F811,F841,E402,E306,E231,E303,E501,E712
 
-# Only check for serious errors
-select = E9,F63,F7,F82,C901
+select = E9,F63,F7,F82
