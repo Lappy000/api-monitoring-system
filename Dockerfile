@@ -1,13 +1,20 @@
 # Multi-stage Dockerfile for API Monitor
 
 # Build stage
-FROM python:3.14-slim as builder
+FROM python:3.11-slim AS builder
 
 WORKDIR /app
 
 # Install build dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
     gcc \
+    g++ \
+    python3-dev \
+    libffi-dev \
+    libssl-dev \
+    cargo \
+    rustc \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements
@@ -17,7 +24,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # Runtime stage
-FROM python:3.14-slim
+FROM python:3.11-slim
 
 WORKDIR /app
 
