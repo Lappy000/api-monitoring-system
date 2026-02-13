@@ -40,7 +40,7 @@ A production-ready API monitoring system with asynchronous health checks, persis
 
 ```bash
 # Clone repository
-git clone https://github.com/YOUR_USERNAME/api-monitoring-system
+git clone https://github.com/Lappy000/api-monitoring-system
 cd api-monitoring-system
 
 # Create virtual environment
