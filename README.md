@@ -14,12 +14,14 @@ A production-ready API monitoring system with asynchronous health checks, persis
 - **Persistent Storage**: SQLite for development, PostgreSQL for production
 - **Uptime Analytics**: Calculate uptime for 24h, 7d, and 30d periods
 - **Multi-Channel Notifications**: Email, Webhooks, and Telegram support
+- **SSL Certificate Monitoring**: Track TLS cert expiry, issuer, and SAN across all endpoints
 - **RESTful API**: Full CRUD operations and statistics endpoints
 - **YAML Configuration**: Simple, readable configuration files
 
 ### Technical Features
 - **Async I/O**: Built with `asyncio` for maximum performance
-- **Retry Mechanism**: Exponential backoff for transient failures
+- **Circuit Breaker Pattern**: Fault tolerance with configurable thresholds, registry, and management API
+- **Retry Mechanism**: Exponential backoff with jitter for transient failures
 - **Structured Logging**: JSON and text formats with rotation
 - **Comprehensive Tests**: Extensive test coverage with pytest
 - **Docker Support**: Ready-to-deploy containers
@@ -245,6 +247,57 @@ FastAPI automatically generates interactive API documentation:
 #### Health Check
 ```bash
 GET /health
+```
+
+#### SSL Certificate Status
+```bash
+# Check all HTTPS endpoints
+GET /health/ssl
+
+# Check specific endpoint, custom warning threshold
+GET /health/ssl?endpoint_id=1&warning_days=14
+```
+
+Response:
+```json
+{
+  "summary": {
+    "total_endpoints": 5,
+    "https_checked": 4,
+    "skipped_non_https": 1,
+    "valid": 3,
+    "expiring_soon": 1,
+    "expired": 0,
+    "errors": 0,
+    "warning_threshold_days": 30
+  },
+  "certificates": [
+    {
+      "hostname": "api.example.com",
+      "port": 443,
+      "subject": {"commonName": "api.example.com"},
+      "issuer": {"commonName": "R3", "organizationName": "Let's Encrypt"},
+      "days_until_expiry": 72,
+      "is_expired": false,
+      "is_expiring_soon": false,
+      "san_list": ["api.example.com", "*.example.com"],
+      "endpoint_id": 1,
+      "endpoint_name": "Production API"
+    }
+  ]
+}
+```
+
+#### Circuit Breaker Management
+```bash
+# View all circuit breaker states
+GET /health/circuit-breakers
+
+# Reset a specific circuit breaker
+POST /health/circuit-breakers/health_check_prod_api/reset
+
+# Reset all circuit breakers
+POST /health/circuit-breakers/reset-all
 ```
 
 #### List Endpoints
@@ -577,7 +630,9 @@ This project is licensed under the MIT License - see LICENSE file for details.
 - WebSocket Updates: Real-time status updates for dashboards
 - Response Body Validation: JSON schema validation for API responses
 
-### ✅ Completed
+### Completed
+- **SSL Certificate Monitoring**: TLS cert expiry checks with per-endpoint and bulk scanning
+- **Circuit Breaker Management API**: Reset individual or all circuit breakers via REST endpoints
 - **Test Coverage**: Improved from 63% to 80% with comprehensive test suite
 - **Event Loop Stability**: Resolved async test conflicts for 100% success rate
 - **Test Documentation**: Created user-friendly guides and automated verification
