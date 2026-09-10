@@ -1,7 +1,9 @@
 # Core Framework
 fastapi==0.121.1
 uvicorn[standard]==0.24.0
-pydantic==2.7.4
+# 2.9 removes allOf wrappers around defaulted model refs (pydantic/pydantic#10029),
+# required by FastAPI 0.121.1's OpenAPI schema remapping.
+pydantic==2.9.2
 pydantic-settings==2.12.0
 
 # Async HTTP Client
