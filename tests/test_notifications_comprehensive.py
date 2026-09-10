@@ -14,6 +14,18 @@ from app.models.notification_log import NotificationLog
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+@pytest.fixture(autouse=True)
+def prohibit_unmocked_notification_transports():
+    """A missed channel mock must fail, even if production catches its error."""
+    with patch('app.core.notifications.aiosmtplib.send') as smtp, \
+         patch('app.core.notifications.aiohttp.ClientSession') as http:
+        smtp.side_effect = AssertionError("Test attempted unmocked SMTP")
+        http.side_effect = AssertionError("Test attempted unmocked HTTP")
+        yield
+        smtp.assert_not_called()
+        http.assert_not_called()
+
+
 @pytest.fixture
 def notifications_config():
     """Create test notifications config."""
@@ -305,7 +317,7 @@ async def test_send_webhook_failure(notification_manager, mock_db):
             return self
         async def __aexit__(self, exc_type, exc_val, exc_tb):
             return None
-        async def request(self, *args, **kwargs):
+        def request(self, *args, **kwargs):
             raise Exception("Connection error")
     
     with patch('aiohttp.ClientSession', return_value=MockSession()):
@@ -324,7 +336,9 @@ async def test_send_webhook_retry(notification_manager, mock_db):
     mock_session = MagicMock()
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=None)
-    mock_session.request = AsyncMock(return_value=mock_response)
+    mock_response.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_response.__aexit__ = AsyncMock(return_value=None)
+    mock_session.request = MagicMock(return_value=mock_response)
     
     with patch('aiohttp.ClientSession') as mock_client_session, \
          patch('asyncio.sleep', new_callable=AsyncMock) as mock_sleep:
@@ -388,7 +402,7 @@ async def test_send_telegram_failure(notification_manager, mock_db):
     mock_session = MagicMock()
     mock_session.__aenter__ = AsyncMock(return_value=mock_session)
     mock_session.__aexit__ = AsyncMock(return_value=None)
-    mock_session.post = AsyncMock(side_effect=Exception("API error"))
+    mock_session.post = MagicMock(side_effect=Exception("API error"))
     
     with patch('aiohttp.ClientSession') as mock_client_session:
         mock_client_session.return_value = mock_session
@@ -649,10 +663,19 @@ async def test_webhook_payload_with_complex_template(notification_manager, sampl
     # Use a simple template that won't cause JSON parsing issues
     notification_manager.config.webhook.payload_template = "Endpoint {endpoint_name} is down"
     
-    with patch.object(notification_manager, 'send_webhook', new_callable=AsyncMock) as mock_webhook:
+    with patch.object(notification_manager, 'send_webhook', new_callable=AsyncMock) as mock_webhook, \
+         patch.object(notification_manager, 'send_email', new_callable=AsyncMock) as mock_email, \
+         patch.object(notification_manager, 'send_telegram', new_callable=AsyncMock) as mock_telegram:
         mock_webhook.return_value = True
-        
+        mock_email.return_value = True
+        mock_telegram.return_value = True
+
         await notification_manager.notify_failure(sample_endpoint, sample_result, mock_db)
+        mock_email.assert_awaited_once()
+        mock_telegram.assert_awaited_once()
+        mock_webhook.assert_awaited_once()
+        assert mock_db.add.call_count == 3
+        mock_db.commit.assert_awaited_once()
         
         # Verify webhook was called with formatted message
         assert mock_webhook.called

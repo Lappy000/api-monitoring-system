@@ -103,6 +103,7 @@ async def test_list_endpoints_success(mock_request, mock_db, sample_endpoint):
     # Mock query results
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = [sample_endpoint]
+    mock_result.scalar_one.return_value = 1
     mock_db.execute.return_value = mock_result
     
     response = await endpoints.list_endpoints(
@@ -124,6 +125,7 @@ async def test_list_endpoints_with_filters(mock_request, mock_db, sample_endpoin
     # Mock query results
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = [sample_endpoint]
+    mock_result.scalar_one.return_value = 1
     mock_db.execute.return_value = mock_result
     
     response = await endpoints.list_endpoints(
@@ -161,6 +163,7 @@ async def test_list_endpoints_pagination(mock_request, mock_db):
     
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = endpoints_list
+    mock_result.scalar_one.return_value = 3
     mock_db.execute.return_value = mock_result
     
     response = await endpoints.list_endpoints(
@@ -613,6 +616,7 @@ async def test_list_endpoints_empty(mock_request, mock_db):
     """Test listing endpoints when none exist."""
     mock_result = MagicMock()
     mock_result.scalars.return_value.all.return_value = []
+    mock_result.scalar_one.return_value = 0
     mock_db.execute.return_value = mock_result
     
     response = await endpoints.list_endpoints(

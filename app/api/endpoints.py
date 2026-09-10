@@ -1,7 +1,7 @@
 """Endpoint management API routes."""
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, Request
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -56,9 +56,12 @@ async def list_endpoints(
     result = await db.execute(query)
     endpoints = result.scalars().all()
     
-    # Get total count
-    count_result = await db.execute(select(Endpoint))
-    total = len(count_result.scalars().all())
+    # Count the same filtered set, without pagination or loading every row.
+    count_query = select(func.count()).select_from(Endpoint)
+    if active_only:
+        count_query = count_query.where(Endpoint.is_active == True)
+    count_result = await db.execute(count_query)
+    total = count_result.scalar_one()
     
     logger.info(f"Listed {len(endpoints)} endpoints")
     
