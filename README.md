@@ -49,9 +49,17 @@ cd api-monitoring-system
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt
+# Install the application and its runtime dependencies
+python -m pip install .
+
+# For development (same pinned tools as requirements-dev.txt)
+python -m pip install -e ".[dev]"
 ```
+
+The wheel contains the `app` package only; the unrelated `src` utilities and
+repository test suite are not installed as application modules. Runtime pins
+come from `requirements.txt`, and the distribution version comes from
+`app.__version__`. Python 3.11+ is required, as in the CI test matrix.
 
 ### 2. Configuration
 
@@ -92,7 +100,13 @@ alembic upgrade head
 ### 4. Start Server
 
 ```bash
-# Development
+# Installed console command (uses the existing YAML/environment configuration)
+api-monitoring-system
+
+# Show help without loading configuration or starting the server
+api-monitoring-system --help
+
+# Development with explicit Uvicorn options
 uvicorn app.main:app --reload
 
 # Production
